@@ -32,11 +32,13 @@
     }
 
     /* Soporte para el corte superior / Notch del iPhone */
+    /* !important porque Tailwind (CDN) puede inyectar sus reglas después de este <style>
+       y "empatar" en especificidad con py-3, pisando el padding-top que necesitamos aquí. */
     .pt-safe {
-      padding-top: env(safe-area-inset-top, 1rem);
+      padding-top: env(safe-area-inset-top, 1rem) !important;
     }
     .pb-safe {
-      padding-bottom: env(safe-area-inset-bottom, 1rem);
+      padding-bottom: env(safe-area-inset-bottom, 1rem) !important;
     }
 
     /* Estilo de la barra de scroll */
@@ -48,7 +50,7 @@
 <body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col justify-between">
 
   <!-- Encabezado superior -->
-  <header class="bg-slate-900/80 backdrop-blur-md border-b border-slate-800 sticky top-0 z-30 pt-safe px-4 py-3 flex justify-between items-center">
+  <header class="bg-slate-900/80 backdrop-blur-md border-b border-slate-800 sticky top-0 z-30 pt-safe px-4 pb-3 flex justify-between items-center">
     <div class="flex items-center space-x-2">
       <i data-lucide="book-open" class="text-indigo-500 w-6 h-6"></i>
       <h1 class="text-xl font-bold tracking-tight bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">Comic Tracker</h1>
