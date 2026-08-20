@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Comic Release Tracker</title>
+  
+  <!-- Manifest de la PWA (instalación en Android/Chrome/escritorio) -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0f172a">
+
+  <!-- Configuración PWA para iOS -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Mis Cómics">
+  <link rel="apple-touch-icon" href="icon-180.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    /* Estilos personalizados para sensación nativa de iOS */
+    body {
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      -webkit-user-select: none;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    /* Soporte para el corte superior / Notch del iPhone */
+    .pt-safe {
+      padding-top: env(safe-area-inset-top, 1rem);
+    }
+    .pb-safe {
+      padding-bottom: env(safe-area-inset-bottom, 1rem);
+    }
+
+    /* Estilo de la barra de scroll */
+    ::-webkit-scrollbar {
+      display: none;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col justify-between">
+
+  <!-- Encabezado superior -->
+  <header class="bg-slate-900/80 backdrop-blur-md border-b border-slate-800 sticky top-0 z-30 pt-safe px-4 py-3 flex justify-between items-center">
+    <div class="flex items-center space-x-2">
+      <i data-lucide="book-open" class="text-indigo-500 w-6 h-6"></i>
+      <h1 class="text-xl font-bold tracking-tight bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">Comic Tracker</h1>
+    </div>
+    <div class="flex items-center space-x-2">
+      <button onclick="exportData()" title="Exportar Backup JSON" class="p-2 rounded-xl bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition active:scale-95">
+        <i data-lucide="download" class="w-4 h-4"></i>
+      </button>
+      <label title="Importar Backup JSON" class="p-2 rounded-xl bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition cursor-pointer active:scale-95">
+        <i data-lucide="upload" class="w-4 h-4"></i>
+        <input type="file" id="import-file" accept=".json" onchange="importData(event)" class="hidden">
+      </label>
+      <button onclick="openModal()" class="bg-indigo-600 hover:bg-indigo-500 active:scale-95 transition-all text-white p-2 rounded-full shadow-lg shadow-indigo-600/30">
+        <i data-lucide="plus" class="w-5 h-5"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- Contenido Principal -->
+  <main class="flex-1 overflow-y-auto pb-24 px-4 pt-4">
+
+    <!-- Seccion 1: Calendario -->
+    <section id="view-calendar" class="space-y-4">
+      <!-- Navegación del mes -->
+      <div class="flex justify-between items-center bg-slate-900 p-3 rounded-2xl border border-slate-800">
+        <button onclick="changeMonth(-1)" class="p-2 hover:bg-slate-800 rounded-xl transition text-slate-400 hover:text-white">
+          <i data-lucide="chevron-left" class="w-5 h-5"></i>
+        </button>
+        <h2 id="current-month-title" class="text-lg font-semibold capitalize text-slate-200"></h2>
+        <button onclick="changeMonth(1)" class="p-2 hover:bg-slate-800 rounded-xl transition text-slate-400 hover:text-white">
+          <i data-lucide="chevron-right" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Días de la semana -->
+      <div class="grid grid-cols-7 text-center text-xs font-semibold text-slate-500">
+        <div>Lun</div><div>Mar</div><div>Mié</div><div>Jue</div><div>Vie</div><div>Sáb</div><div>Dom</div>
+      </div>
+
+      <!-- Matriz de Días -->
+      <div id="calendar-grid" class="grid grid-cols-7 gap-1 text-sm">
+        <!-- Renderizado dinámico -->
+      </div>
+
+      <!-- Detalle del día seleccionado o lista general -->
+      <div class="mt-6">
+        <div class="flex justify-between items-center mb-3">
+          <h3 class="text-md font-semibold text-slate-300" id="selected-day-title">Lanzamientos en este mes</h3>
+          <button onclick="clearDaySelection()" id="clear-day-filter" class="hidden text-xs text-indigo-400 hover:underline">Ver todos</button>
+        </div>
+        <div id="day-comics-list" class="space-y-3">
+          <!-- Cómics del mes/día -->
+        </div>
+      </div>
+    </section>
+
+    <!-- Seccion 2: Lista de Pendientes (Cómics que no se han conseguido) -->
+    <section id="view-missing" class="hidden space-y-4">
+      <div class="bg-amber-500/10 border border-amber-500/20 p-4 rounded-2xl flex items-start space-x-3">
+        <i data-lucide="alert-circle" class="w-5 h-5 text-amber-400 shrink-0 mt-0.5"></i>
+        <p class="text-xs text-amber-200/90 leading-relaxed">
+          Cómics cuya fecha de salida ya pasó y aún no se han marcado como <b>"Conseguido"</b>. Muestra el tiempo transcurrido desde su lanzamiento.
+        </p>
+      </div>
+
+      <div id="missing-comics-list" class="space-y-3">
+        <!-- Cómics pendientes dinámicos -->
+      </div>
+    </section>
+
+    <!-- Seccion 3: Todos los Cómics -->
+    <section id="view-all" class="hidden space-y-4">
+      <!-- Barra de Filtros, Búsqueda y Estadísticas -->
+      <div class="space-y-3">
+        <div class="flex gap-2">
+          <div class="relative flex-1">
+            <i data-lucide="search" class="w-4 h-4 absolute left-3 top-3 text-slate-500"></i>
+            <input type="text" id="search-input" oninput="renderApp()" placeholder="Buscar título, tomo, editorial..." class="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500">
+          </div>
+          <select id="filter-status" onchange="renderApp()" class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500">
+            <option value="all">Todos</option>
+            <option value="pending">Pendientes</option>
+            <option value="reserved">Reservados</option>
+            <option value="acquired">Conseguidos</option>
+          </select>
+        </div>
+
+        <!-- Resumen de Gastos -->
+        <div class="grid grid-cols-2 gap-2 text-xs">
+          <div class="bg-slate-900/80 border border-slate-800 p-3 rounded-2xl flex flex-col justify-between">
+            <span class="text-slate-500 text-[10px] font-semibold tracking-wider">PRESUPUESTO LISTA</span>
+            <span id="total-price" class="text-sm font-bold text-indigo-400 mt-0.5">0.00 €</span>
+          </div>
+          <div class="bg-slate-900/80 border border-slate-800 p-3 rounded-2xl flex flex-col justify-between">
+            <span class="text-slate-500 text-[10px] font-semibold tracking-wider">GASTO CONSEGUIDO</span>
+            <span id="acquired-price" class="text-sm font-bold text-emerald-400 mt-0.5">0.00 €</span>
+          </div>
+        </div>
+      </div>
+
+      <div id="all-comics-list" class="space-y-3">
+        <!-- Todos los cómics registrados -->
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Navegación Inferior Nativa (TabBar) -->
+  <nav class="fixed bottom-0 left-0 right-0 bg-slate-900/90 backdrop-blur-lg border-t border-slate-800 pb-safe z-30">
+    <div class="flex justify-around items-center py-2 px-2">
+      <button onclick="switchTab('calendar')" id="tab-calendar" class="flex flex-col items-center py-1 px-3 text-indigo-400 transition">
+        <i data-lucide="calendar" class="w-6 h-6"></i>
+        <span class="text-[10px] font-medium mt-1">Calendario</span>
+      </button>
+      <button onclick="switchTab('missing')" id="tab-missing" class="flex flex-col items-center py-1 px-3 text-slate-500 hover:text-slate-300 transition relative">
+        <i data-lucide="clock" class="w-6 h-6"></i>
+        <span class="text-[10px] font-medium mt-1">Pendientes</span>
+        <span id="missing-badge" class="hidden absolute top-0 right-3 bg-red-500 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold">0</span>
+      </button>
+      <button onclick="switchTab('all')" id="tab-all" class="flex flex-col items-center py-1 px-3 text-slate-500 hover:text-slate-300 transition">
+        <i data-lucide="list" class="w-6 h-6"></i>
+        <span class="text-[10px] font-medium mt-1">Colección</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- Modal para Añadir / Editar Cómic -->
+  <div id="comic-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4 transition-opacity">
+    <div class="bg-slate-900 w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl border border-slate-800 p-6 space-y-4 shadow-2xl">
+      <div class="flex justify-between items-center pb-2 border-b border-slate-800">
+        <h3 class="text-lg font-bold text-white" id="modal-title">Añadir Nuevo Cómic</h3>
+        <button onclick="closeModal()" class="text-slate-400 hover:text-white p-1">
+          <i data-lucide="x" class="w-6 h-6"></i>
+        </button>
+      </div>
+
+      <form id="comic-form" onsubmit="saveComic(event)" class="space-y-4">
+        <input type="hidden" id="comic-id">
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-400 mb-1">Título del Cómic</label>
+          <input type="text" id="comic-title" required placeholder="Ej. Batman, Spider-Man..." class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 mb-1">Número / Tomo</label>
+            <input type="text" id="comic-issue" placeholder="Ej. #12" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 mb-1">Formato</label>
+            <select id="comic-format" onchange="toggleFormatFields()" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+              <option value="physical">Físico</option>
+              <option value="digital">Digital</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 mb-1">Editorial / Publisher</label>
+            <input type="text" id="comic-publisher" placeholder="Panini, ECC, Norma..." class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 mb-1">Precio (€)</label>
+            <input type="number" step="0.01" min="0" id="comic-price" placeholder="0.00" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 mb-1">Estado inicial</label>
+            <select id="comic-status" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+              <option value="pending">Pendiente</option>
+              <option id="opt-status-reserved" value="reserved">Reservado (Pre-order)</option>
+              <option value="acquired">Conseguido</option>
+            </select>
+          </div>
+          <div id="cutoff-container">
+            <label class="block text-xs font-semibold text-amber-400 mb-1">Fecha Cut-Off (Reserva)</label>
+            <input type="date" id="comic-cutoff" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-indigo-400 mb-1">Fecha de Lanzamiento</label>
+          <input type="date" id="comic-release" required class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-400 mb-1">Notas / Tienda</label>
+          <input type="text" id="comic-notes" placeholder="Ej. Tienda habitual, variante de portada..." class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+        </div>
+
+        <div class="pt-2 flex gap-2">
+          <button type="button" onclick="closeModal()" class="w-1/2 bg-slate-800 hover:bg-slate-700 text-slate-300 py-3 rounded-xl font-semibold text-sm">Cancelar</button>
+          <button type="submit" class="w-1/2 bg-indigo-600 hover:bg-indigo-500 text-white py-3 rounded-xl font-semibold text-sm shadow-lg shadow-indigo-600/30">Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal de Confirmación de Borrado Custom -->
+  <div id="delete-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 p-6 rounded-3xl max-w-xs w-full space-y-4 text-center shadow-2xl">
+      <div class="w-12 h-12 bg-red-500/10 text-red-400 rounded-2xl flex items-center justify-center mx-auto border border-red-500/20">
+        <i data-lucide="trash-2" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <h4 class="font-bold text-white text-base">¿Eliminar cómic?</h4>
+        <p class="text-xs text-slate-400 mt-1">Esta acción no se puede deshacer.</p>
+      </div>
+      <div class="flex gap-2 pt-2">
+        <button onclick="closeDeleteModal()" class="w-1/2 bg-slate-800 text-slate-300 py-2.5 rounded-xl text-xs font-semibold hover:bg-slate-700 transition">Cancelar</button>
+        <button id="confirm-delete-btn" class="w-1/2 bg-red-600 text-white py-2.5 rounded-xl text-xs font-semibold hover:bg-red-500 shadow-lg shadow-red-600/30 transition">Eliminar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Lógica JavaScript -->
+  <script>
+    // Variables de Estado Globals
+    let comics = [];
+    let currentDate = new Date();
+    let selectedDay = null;
+    let activeTab = 'calendar';
+    let pendingDeleteId = null;
+
+    // Cargar datos de localStorage al iniciar
+    window.onload = function() {
+      const savedComics = localStorage.getItem('pwa_comics_data');
+      if (savedComics) {
+        comics = JSON.parse(savedComics);
+      }
+      lucide.createIcons();
+      renderApp();
+    };
+
+    // Registrar el Service Worker (permite instalar la app y funcionar offline)
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('service-worker.js')
+          .catch((err) => console.error('Error registrando el Service Worker:', err));
+      });
+    }
+
+    // Exportar Backup de cómics a archivo JSON
+    function exportData() {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(comics, null, 2));
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", `comics_backup_${new Date().toISOString().split('T')[0]}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+    }
+
+    // Importar Backup JSON
+    function importData(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const imported = JSON.parse(e.target.result);
+          if (Array.isArray(imported)) {
+            comics = imported;
+            saveToStorage();
+          }
+        } catch (err) {
+          console.error("Error al importar el JSON:", err);
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    // Alternar campos del formulario según el formato (Físico vs Digital)
+    function toggleFormatFields() {
+      const format = document.getElementById('comic-format').value;
+      const cutoffContainer = document.getElementById('cutoff-container');
+      const optReserved = document.getElementById('opt-status-reserved');
+      const statusSelect = document.getElementById('comic-status');
+
+      if (format === 'digital') {
+        cutoffContainer.classList.add('hidden');
+        document.getElementById('comic-cutoff').value = '';
+        optReserved.classList.add('hidden');
+        if (statusSelect.value === 'reserved') {
+          statusSelect.value = 'pending';
+        }
+      } else {
+        cutoffContainer.classList.remove('hidden');
+        optReserved.classList.remove('hidden');
+      }
+    }
+
+    // Guardar cómics en localStorage
+    function saveToStorage() {
+      localStorage.setItem('pwa_comics_data', JSON.stringify(comics));
+      renderApp();
+    }
+
+    // Navegación de pestañas (Tabs)
+    function switchTab(tab) {
+      activeTab = tab;
+      document.getElementById('view-calendar').classList.add('hidden');
+      document.getElementById('view-missing').classList.add('hidden');
+      document.getElementById('view-all').classList.add('hidden');
+
+      document.getElementById('tab-calendar').className = "flex flex-col items-center py-1 px-3 text-slate-500 hover:text-slate-300 transition";
+      document.getElementById('tab-missing').className = "flex flex-col items-center py-1 px-3 text-slate-500 hover:text-slate-300 transition relative";
+      document.getElementById('tab-all').className = "flex flex-col items-center py-1 px-3 text-slate-500 hover:text-slate-300 transition";
+
+      if (tab === 'calendar') {
+        document.getElementById('view-calendar').classList.remove('hidden');
+        document.getElementById('tab-calendar').className = "flex flex-col items-center py-1 px-3 text-indigo-400 transition";
+      } else if (tab === 'missing') {
+        document.getElementById('view-missing').classList.remove('hidden');
+        document.getElementById('tab-missing').className = "flex flex-col items-center py-1 px-3 text-amber-400 transition relative";
+      } else if (tab === 'all') {
+        document.getElementById('view-all').classList.remove('hidden');
+        document.getElementById('tab-all').className = "flex flex-col items-center py-1 px-3 text-indigo-400 transition";
+      }
+      renderApp();
+    }
+
+    // Renderizar la vista actual
+    function renderApp() {
+      updateMissingBadge();
+      if (activeTab === 'calendar') {
+        renderCalendar();
+        renderDayList();
+      } else if (activeTab === 'missing') {
+        renderMissingComics();
+      } else if (activeTab === 'all') {
+        renderAllComics();
+      }
+      lucide.createIcons();
+    }
+
+    // Cambiar de mes en el calendario
+    function changeMonth(delta) {
+      currentDate.setMonth(currentDate.getMonth() + delta);
+      selectedDay = null;
+      renderApp();
+    }
+
+    // Renderizar Cuadrícula del Calendario
+    function renderCalendar() {
+      const year = currentDate.getFullYear();
+      const month = currentDate.getMonth();
+
+      const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+      const titleEl = document.getElementById('current-month-title');
+      if (titleEl) titleEl.innerText = `${monthNames[month]} ${year}`;
+
+      const grid = document.getElementById('calendar-grid');
+      if (!grid) return;
+      grid.innerHTML = '';
+
+      const firstDayOfMonth = new Date(year, month, 1).getDay();
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+      // Ajuste para comenzar en Lunes (0 -> Dom, 1 -> Lun...)
+      let startingPoint = firstDayOfMonth === 0 ? 6 : firstDayOfMonth - 1;
+
+      // Celdas vacías previas
+      for (let i = 0; i < startingPoint; i++) {
+        grid.innerHTML += `<div class="h-12 bg-slate-900/40 rounded-xl"></div>`;
+      }
+
+      // Días del mes
+      const todayStr = new Date().toISOString().split('T')[0];
+
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        
+        // Buscar cómics con fecha de salida o cut-off en este día
+        const dayReleases = comics.filter(c => c.releaseDate === dateStr);
+        const dayCutoffs = comics.filter(c => c.format !== 'digital' && c.cutoffDate === dateStr);
+
+        const isToday = dateStr === todayStr;
+        const isSelected = dateStr === selectedDay;
+
+        let bgClass = "bg-slate-900 border-slate-800/80";
+        if (isSelected) bgClass = "bg-indigo-600/30 border-indigo-500";
+        else if (isToday) bgClass = "bg-slate-800 border-slate-600 font-bold";
+
+        grid.innerHTML += `
+          <div onclick="selectDay('${dateStr}')" class="h-12 border ${bgClass} rounded-xl p-1 flex flex-col justify-between items-center cursor-pointer active:scale-95 transition">
+            <span class="text-xs ${isToday ? 'text-indigo-400' : 'text-slate-300'}">${day}</span>
+            <div class="flex space-x-1">
+              ${dayCutoffs.length > 0 ? `<span class="w-1.5 h-1.5 rounded-full bg-amber-400" title="Cut-off"></span>` : ''}
+              ${dayReleases.length > 0 ? `<span class="w-1.5 h-1.5 rounded-full bg-indigo-400" title="Lanzamiento"></span>` : ''}
+            </div>
+          </div>
+        `;
+      }
+    }
+
+    // Seleccionar día del calendario
+    function selectDay(dateStr) {
+      if (selectedDay === dateStr) {
+        selectedDay = null;
+      } else {
+        selectedDay = dateStr;
+      }
+      renderApp();
+    }
+
+    function clearDaySelection() {
+      selectedDay = null;
+      renderApp();
+    }
+
+    // Renderizar lista de cómics en la vista Calendario
+    function renderDayList() {
+      const container = document.getElementById('day-comics-list');
+      const title = document.getElementById('selected-day-title');
+      const clearBtn = document.getElementById('clear-day-filter');
+      if (!container || !title) return;
+
+      const year = currentDate.getFullYear();
+      const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+      const monthPrefix = `${year}-${month}`;
+
+      let filteredComics = [];
+
+      if (selectedDay) {
+        title.innerText = `Lanzamientos el ${selectedDay.split('-').reverse().join('/')}`;
+        if (clearBtn) clearBtn.classList.remove('hidden');
+        filteredComics = comics.filter(c => c.releaseDate === selectedDay || (c.format !== 'digital' && c.cutoffDate === selectedDay));
+      } else {
+        title.innerText = `Lanzamientos en este mes`;
+        if (clearBtn) clearBtn.classList.add('hidden');
+        filteredComics = comics.filter(c => c.releaseDate.startsWith(monthPrefix) || (c.format !== 'digital' && c.cutoffDate && c.cutoffDate.startsWith(monthPrefix)));
+      }
+
+      if (filteredComics.length === 0) {
+        container.innerHTML = `
+          <div class="text-center py-8 text-slate-500 text-sm">
+            No hay cómics programados para ${selectedDay ? 'este día' : 'este mes'}.
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = filteredComics.map(c => renderComicCard(c)).join('');
+    }
+
+    // Renderizar cómics no conseguidos (Pendientes / Atrasados)
+    function renderMissingComics() {
+      const container = document.getElementById('missing-comics-list');
+      if (!container) return;
+      const todayStr = new Date().toISOString().split('T')[0];
+
+      // Filtro: Fecha de lanzamiento menor a hoy Y estado distinto de 'acquired'
+      const missing = comics.filter(c => c.releaseDate < todayStr && c.status !== 'acquired');
+
+      if (missing.length === 0) {
+        container.innerHTML = `
+          <div class="text-center py-12 text-slate-500 space-y-2">
+            <i data-lucide="check-circle-2" class="w-12 h-12 mx-auto text-emerald-500/50"></i>
+            <p class="text-sm font-medium">¡Estás al día!</p>
+            <p class="text-xs text-slate-600">No tienes cómics atrasados sin conseguir.</p>
+          </div>
+        `;
+        return;
+      }
+
+      // Ordenar del más antiguo al más reciente
+      missing.sort((a, b) => new Date(a.releaseDate) - new Date(b.releaseDate));
+
+      container.innerHTML = missing.map(c => renderComicCard(c, true)).join('');
+    }
+
+    // Renderizar todos los cómics con Filtro, Buscador y Gastos
+    function renderAllComics() {
+      const container = document.getElementById('all-comics-list');
+      const searchVal = (document.getElementById('search-input')?.value || '').toLowerCase().trim();
+      const statusVal = document.getElementById('filter-status')?.value || 'all';
+
+      // Filtrar cómics según búsqueda y estado
+      let filtered = comics.filter(c => {
+        const matchesSearch = !searchVal || 
+          c.title.toLowerCase().includes(searchVal) || 
+          (c.issue && c.issue.toLowerCase().includes(searchVal)) || 
+          (c.publisher && c.publisher.toLowerCase().includes(searchVal)) ||
+          (c.notes && c.notes.toLowerCase().includes(searchVal));
+
+        const matchesStatus = statusVal === 'all' || c.status === statusVal;
+
+        return matchesSearch && matchesStatus;
+      });
+
+      // Calcular estadísticas globales de precio
+      const totalPrice = comics.reduce((sum, c) => sum + (parseFloat(c.price) || 0), 0);
+      const acquiredPrice = comics.filter(c => c.status === 'acquired').reduce((sum, c) => sum + (parseFloat(c.price) || 0), 0);
+
+      document.getElementById('total-price').innerText = `${totalPrice.toFixed(2)} €`;
+      document.getElementById('acquired-price').innerText = `${acquiredPrice.toFixed(2)} €`;
+
+      if (filtered.length === 0) {
+        container.innerHTML = `
+          <div class="text-center py-12 text-slate-500 text-sm">
+            ${comics.length === 0 ? 'Tu lista de cómics está vacía. Añade uno con el botón +.' : 'No se encontraron cómics con los filtros aplicados.'}
+          </div>
+        `;
+        return;
+      }
+
+      // Ordenar por fecha de salida descendente
+      const sorted = [...filtered].sort((a, b) => new Date(b.releaseDate) - new Date(a.releaseDate));
+      container.innerHTML = sorted.map(c => renderComicCard(c)).join('');
+    }
+
+    // Plantilla visual de tarjeta de Cómic
+    function renderComicCard(comic, showElapsedTime = false) {
+      const isDigital = comic.format === 'digital';
+
+      const statusColors = {
+        pending: 'bg-slate-800 text-slate-300 border-slate-700',
+        reserved: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
+        acquired: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+      };
+
+      const statusLabels = {
+        pending: 'Pendiente',
+        reserved: 'Reservado',
+        acquired: 'Conseguido'
+      };
+
+      const elapsedTimeText = showElapsedTime ? calculateTimeAgo(comic.releaseDate) : '';
+
+      return `
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3 relative overflow-hidden shadow-lg">
+          <div class="flex justify-between items-start">
+            <div class="space-y-1">
+              <div class="flex items-center space-x-2">
+                <h4 class="font-bold text-white text-base leading-tight">${escapeHtml(comic.title)} <span class="text-indigo-400 font-medium">${escapeHtml(comic.issue)}</span></h4>
+              </div>
+              <div class="flex items-center space-x-1.5 pt-0.5 flex-wrap gap-y-1">
+                ${comic.publisher ? `
+                  <span class="inline-flex items-center text-[10px] px-2 py-0.5 rounded-md font-semibold bg-purple-950/80 text-purple-300 border border-purple-800/50">
+                    ${escapeHtml(comic.publisher)}
+                  </span>
+                ` : ''}
+                ${isDigital ? `
+                  <span class="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md font-medium bg-cyan-950/80 text-cyan-300 border border-cyan-800/50">
+                    <i data-lucide="smartphone" class="w-3 h-3"></i> Digital
+                  </span>
+                ` : `
+                  <span class="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md font-medium bg-slate-800 text-slate-400 border border-slate-700/60">
+                    <i data-lucide="book-open" class="w-3 h-3"></i> Físico
+                  </span>
+                `}
+                ${comic.price ? `
+                  <span class="inline-flex items-center text-[10px] px-2 py-0.5 rounded-md font-bold bg-slate-800 text-slate-200 border border-slate-700/60">
+                    ${parseFloat(comic.price).toFixed(2)} €
+                  </span>
+                ` : ''}
+              </div>
+              ${comic.notes ? `<p class="text-xs text-slate-400 mt-1">${escapeHtml(comic.notes)}</p>` : ''}
+            </div>
+            
+            <span class="text-xs px-2.5 py-1 rounded-full border font-medium ${statusColors[comic.status]}">
+              ${statusLabels[comic.status]}
+            </span>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-slate-800/80 text-slate-400">
+            <div>
+              <span class="block text-[10px] text-slate-500">FECHA SALIDA</span>
+              <span class="font-medium text-slate-200">${formatDate(comic.releaseDate)}</span>
+            </div>
+            ${(!isDigital && comic.cutoffDate) ? `
+              <div>
+                <span class="block text-[10px] text-amber-500 font-semibold">CUT-OFF (RESERVA)</span>
+                <span class="font-medium text-amber-300">${formatDate(comic.cutoffDate)}</span>
+              </div>
+            ` : '<div></div>'}
+          </div>
+
+          ${showElapsedTime ? `
+            <div class="bg-red-500/10 border border-red-500/20 rounded-xl p-2 flex items-center space-x-2 text-xs text-red-300">
+              <i data-lucide="clock" class="w-4 h-4 text-red-400 shrink-0"></i>
+              <span>Salió hace: <b>${elapsedTimeText}</b></span>
+            </div>
+          ` : ''}
+
+          <div class="flex justify-between items-center pt-2">
+            <!-- Acciones rápidas de estado -->
+            <div class="flex space-x-1">
+              <button onclick="setStatus('${comic.id}', 'acquired')" title="Marcar como conseguido" class="px-2.5 py-1.5 rounded-lg text-xs font-medium ${comic.status === 'acquired' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-emerald-400'} transition flex items-center space-x-1">
+                <i data-lucide="check" class="w-3.5 h-3.5"></i>
+                <span>Tengo</span>
+              </button>
+              ${!isDigital ? `
+                <button onclick="setStatus('${comic.id}', 'reserved')" title="Marcar como reservado" class="px-2.5 py-1.5 rounded-lg text-xs font-medium ${comic.status === 'reserved' ? 'bg-amber-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-amber-400'} transition flex items-center space-x-1">
+                  <i data-lucide="bookmark" class="w-3.5 h-3.5"></i>
+                  <span>Reservado</span>
+                </button>
+              ` : ''}
+            </div>
+
+            <!-- Botones editar/borrar -->
+            <div class="flex items-center space-x-1">
+              <button onclick="editComic('${comic.id}')" class="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition">
+                <i data-lucide="pencil" class="w-4 h-4"></i>
+              </button>
+              <button onclick="confirmDeleteComic('${comic.id}')" class="p-1.5 text-slate-400 hover:text-red-400 rounded-lg hover:bg-slate-800 transition">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // Calcular el tiempo transcurrido exacto en Meses, Semanas y Días
+    function calculateTimeAgo(dateString) {
+      const releaseDate = new Date(dateString + "T00:00:00");
+      const today = new Date();
+      
+      // Resetear horas para comparación exacta de días
+      today.setHours(0,0,0,0);
+
+      let diffInDays = Math.floor((today - releaseDate) / (1000 * 60 * 60 * 24));
+
+      if (diffInDays <= 0) return "Hoy";
+
+      const months = Math.floor(diffInDays / 30);
+      let remainingDays = diffInDays % 30;
+
+      const weeks = Math.floor(remainingDays / 7);
+      const days = remainingDays % 7;
+
+      let parts = [];
+      if (months > 0) parts.push(`${months} ${months === 1 ? 'mes' : 'meses'}`);
+      if (weeks > 0) parts.push(`${weeks} ${weeks === 1 ? 'semana' : 'semanas'}`);
+      if (days > 0 || parts.length === 0) parts.push(`${days} ${days === 1 ? 'día' : 'días'}`);
+
+      return parts.join(', ');
+    }
+
+    // Actualizar badge de cómics faltantes
+    function updateMissingBadge() {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const count = comics.filter(c => c.releaseDate < todayStr && c.status !== 'acquired').length;
+      const badge = document.getElementById('missing-badge');
+      
+      if (count > 0) {
+        badge.innerText = count;
+        badge.classList.remove('hidden');
+      } else {
+        badge.classList.add('hidden');
+      }
+    }
+
+    // Cambiar estado rápido
+    function setStatus(id, newStatus) {
+      const comic = comics.find(c => c.id === id);
+      if (comic) {
+        comic.status = comic.status === newStatus ? 'pending' : newStatus;
+        saveToStorage();
+      }
+    }
+
+    // Modal Operaciones
+    function openModal() {
+      document.getElementById('comic-id').value = '';
+      document.getElementById('comic-form').reset();
+      document.getElementById('comic-format').value = 'physical';
+      toggleFormatFields();
+      document.getElementById('modal-title').innerText = 'Añadir Nuevo Cómic';
+      document.getElementById('comic-modal').classList.remove('hidden');
+    }
+
+    function closeModal() {
+      document.getElementById('comic-modal').classList.add('hidden');
+    }
+
+    function saveComic(e) {
+      e.preventDefault();
+      const id = document.getElementById('comic-id').value;
+      const title = document.getElementById('comic-title').value;
+      const issue = document.getElementById('comic-issue').value;
+      const publisher = document.getElementById('comic-publisher').value;
+      const price = document.getElementById('comic-price').value;
+      const format = document.getElementById('comic-format').value;
+      const status = document.getElementById('comic-status').value;
+      const cutoffDate = format === 'digital' ? '' : document.getElementById('comic-cutoff').value;
+      const releaseDate = document.getElementById('comic-release').value;
+      const notes = document.getElementById('comic-notes').value;
+
+      if (id) {
+        // Editar
+        const index = comics.findIndex(c => c.id === id);
+        if (index !== -1) {
+          comics[index] = { id, title, issue, publisher, price, format, status, cutoffDate, releaseDate, notes };
+        }
+      } else {
+        // Nuevo
+        const newComic = {
+          id: Date.now().toString(),
+          title,
+          issue,
+          publisher,
+          price,
+          format,
+          status,
+          cutoffDate,
+          releaseDate,
+          notes
+        };
+        comics.push(newComic);
+      }
+
+      saveToStorage();
+      closeModal();
+    }
+
+    function editComic(id) {
+      const comic = comics.find(c => c.id === id);
+      if (!comic) return;
+
+      document.getElementById('comic-id').value = comic.id;
+      document.getElementById('comic-title').value = comic.title;
+      document.getElementById('comic-issue').value = comic.issue || '';
+      document.getElementById('comic-publisher').value = comic.publisher || '';
+      document.getElementById('comic-price').value = comic.price || '';
+      document.getElementById('comic-format').value = comic.format || 'physical';
+      toggleFormatFields();
+      document.getElementById('comic-status').value = comic.status;
+      document.getElementById('comic-cutoff').value = comic.cutoffDate || '';
+      document.getElementById('comic-release').value = comic.releaseDate;
+      document.getElementById('comic-notes').value = comic.notes || '';
+
+      document.getElementById('modal-title').innerText = 'Editar Cómic';
+      document.getElementById('comic-modal').classList.remove('hidden');
+    }
+
+    function confirmDeleteComic(id) {
+      pendingDeleteId = id;
+      const modal = document.getElementById('delete-modal');
+      const confirmBtn = document.getElementById('confirm-delete-btn');
+      
+      confirmBtn.onclick = function() {
+        if (pendingDeleteId) {
+          comics = comics.filter(c => c.id !== pendingDeleteId);
+          saveToStorage();
+          closeDeleteModal();
+        }
+      };
+
+      modal.classList.remove('hidden');
+    }
+
+    function closeDeleteModal() {
+      pendingDeleteId = null;
+      document.getElementById('delete-modal').classList.add('hidden');
+    }
+
+    // Utilidades
+    function formatDate(dateStr) {
+      if (!dateStr) return '';
+      const [y, m, d] = dateStr.split('-');
+      return `${d}/${m}/${y}`;
+    }
+
+    function escapeHtml(str) {
+      return str ? str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;") : '';
+    }
+  </script>
+</body>
+</html>
