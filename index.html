@@ -128,7 +128,7 @@
         <div class="flex gap-2">
           <div class="relative flex-1">
             <i data-lucide="search" class="w-4 h-4 absolute left-3 top-3 text-slate-500"></i>
-            <input type="text" id="search-input" oninput="renderApp()" placeholder="Buscar título, tomo, editorial..." class="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500">
+            <input type="text" id="search-input" oninput="renderApp()" placeholder="Buscar colección, número, editorial..." class="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500">
           </div>
           <select id="filter-status" onchange="renderApp()" class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500">
             <option value="all">Todos</option>
@@ -190,22 +190,38 @@
       <form id="comic-form" onsubmit="saveComic(event)" class="space-y-4">
         <input type="hidden" id="comic-id">
 
-        <div>
-          <label class="block text-xs font-semibold text-slate-400 mb-1">Título del Cómic</label>
-          <input type="text" id="comic-title" required placeholder="Ej. Batman, Spider-Man..." class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+        <div class="relative" id="series-input-wrapper">
+          <label class="block text-xs font-semibold text-slate-400 mb-1">Colección</label>
+          <input type="text" id="comic-series" required placeholder="Ej. Amazing Spider-Man" autocomplete="off"
+                 oninput="handleSeriesInput()" onfocus="handleSeriesFocus()"
+                 class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+          <div id="series-suggestions"
+               class="hidden absolute z-20 mt-1 w-full bg-slate-800 border border-slate-700 rounded-xl shadow-2xl max-h-48 overflow-y-auto">
+          </div>
         </div>
 
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="block text-xs font-semibold text-slate-400 mb-1">Número / Tomo</label>
-            <input type="text" id="comic-issue" placeholder="Ej. #12" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+            <label class="block text-xs font-semibold text-slate-400 mb-1">Volumen</label>
+            <input type="text" id="comic-volume" placeholder="Ej. 7" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
           </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 mb-1">Número</label>
+            <input type="text" id="comic-number" placeholder="Ej. 32" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="block text-xs font-semibold text-slate-400 mb-1">Formato</label>
             <select id="comic-format" onchange="toggleFormatFields()" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
               <option value="physical">Físico</option>
               <option value="digital">Digital</option>
             </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 mb-1">Título <span class="text-slate-600 font-normal">(opcional)</span></label>
+            <input type="text" id="comic-title" placeholder="Ej. La Última Cacería" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
           </div>
         </div>
 
@@ -353,6 +369,87 @@
       localStorage.setItem('pwa_comics_data', JSON.stringify(comics));
       renderApp();
     }
+
+    // --- Autocomplete a medida para "Colección" ---
+    // Extrae los nombres de colección ya usados, sin necesidad de guardarlos aparte:
+    // se derivan directamente de los cómics existentes.
+    function getUniqueSeries() {
+      const set = new Set();
+      comics.forEach(c => { if (c.series) set.add(c.series); });
+      return [...set].sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
+    }
+
+    function renderSeriesSuggestions(filterText) {
+      const box = document.getElementById('series-suggestions');
+      if (!box) return;
+
+      const all = getUniqueSeries();
+      const term = (filterText || '').trim().toLowerCase();
+      const currentValue = (filterText || '').trim();
+
+      // No mostramos como sugerencia una coincidencia exacta con lo ya escrito
+      const filtered = (term ? all.filter(s => s.toLowerCase().includes(term)) : all)
+        .filter(s => s.toLowerCase() !== term);
+
+      if (filtered.length === 0) {
+        box.classList.add('hidden');
+        box.innerHTML = '';
+        return;
+      }
+
+      box.innerHTML = filtered.map((s, i) => `
+        <button type="button" data-series-index="${i}"
+                class="w-full text-left px-3 py-2 text-sm text-slate-200 hover:bg-slate-700 active:bg-slate-700 transition truncate flex items-center gap-2">
+          <i data-lucide="book-open" class="w-3.5 h-3.5 text-slate-500 shrink-0"></i>
+          <span class="truncate"></span>
+        </button>
+      `).join('');
+
+      // Insertamos el texto vía textContent (no innerHTML) para evitar cualquier problema de escapado
+      box.querySelectorAll('button[data-series-index]').forEach((btn, i) => {
+        btn.querySelector('span').textContent = filtered[i];
+        // mousedown en vez de click: se dispara ANTES del blur del input, si no, el
+        // blur oculta el dropdown antes de que el click llegue a registrarse.
+        btn.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          selectSeries(filtered[i]);
+        });
+      });
+
+      box.classList.remove('hidden');
+      lucide.createIcons();
+    }
+
+    function selectSeries(value) {
+      const input = document.getElementById('comic-series');
+      input.value = value;
+      hideSeriesSuggestions();
+      input.focus();
+    }
+
+    function hideSeriesSuggestions() {
+      const box = document.getElementById('series-suggestions');
+      if (box) {
+        box.classList.add('hidden');
+        box.innerHTML = '';
+      }
+    }
+
+    function handleSeriesInput() {
+      renderSeriesSuggestions(document.getElementById('comic-series').value);
+    }
+
+    function handleSeriesFocus() {
+      renderSeriesSuggestions(document.getElementById('comic-series').value);
+    }
+
+    // Cerrar el dropdown si se toca fuera de él
+    document.addEventListener('click', (e) => {
+      const wrapper = document.getElementById('series-input-wrapper');
+      if (wrapper && !wrapper.contains(e.target)) {
+        hideSeriesSuggestions();
+      }
+    });
 
     // Navegación de pestañas (Tabs)
     function switchTab(tab) {
@@ -536,9 +633,11 @@
 
       // Filtrar cómics según búsqueda y estado
       let filtered = comics.filter(c => {
-        const matchesSearch = !searchVal || 
-          c.title.toLowerCase().includes(searchVal) || 
-          (c.issue && c.issue.toLowerCase().includes(searchVal)) || 
+        const matchesSearch = !searchVal ||
+          (c.series && c.series.toLowerCase().includes(searchVal)) ||
+          (c.volume && c.volume.toLowerCase().includes(searchVal)) ||
+          (c.number && c.number.toLowerCase().includes(searchVal)) ||
+          (c.title && c.title.toLowerCase().includes(searchVal)) ||
           (c.publisher && c.publisher.toLowerCase().includes(searchVal)) ||
           (c.notes && c.notes.toLowerCase().includes(searchVal));
 
@@ -591,8 +690,11 @@
           <div class="flex justify-between items-start">
             <div class="space-y-1">
               <div class="flex items-center space-x-2">
-                <h4 class="font-bold text-white text-base leading-tight">${escapeHtml(comic.title)} <span class="text-indigo-400 font-medium">${escapeHtml(comic.issue)}</span></h4>
+                <h4 class="font-bold text-white text-base leading-tight">
+                  ${escapeHtml(comic.series)}${comic.volume ? ` <span class="text-slate-400 font-normal">Vol. ${escapeHtml(comic.volume)}</span>` : ''}${comic.number ? ` <span class="text-indigo-400 font-medium">#${escapeHtml(comic.number)}</span>` : ''}
+                </h4>
               </div>
+              ${comic.title ? `<p class="text-xs text-slate-400 italic leading-snug">${escapeHtml(comic.title)}</p>` : ''}
               <div class="flex items-center space-x-1.5 pt-0.5 flex-wrap gap-y-1">
                 ${comic.publisher ? `
                   <span class="inline-flex items-center text-[10px] px-2 py-0.5 rounded-md font-semibold bg-purple-950/80 text-purple-300 border border-purple-800/50">
@@ -726,6 +828,7 @@
       document.getElementById('comic-form').reset();
       document.getElementById('comic-format').value = 'physical';
       toggleFormatFields();
+      hideSeriesSuggestions();
       document.getElementById('modal-title').innerText = 'Añadir Nuevo Cómic';
       document.getElementById('comic-modal').classList.remove('hidden');
     }
@@ -737,8 +840,10 @@
     function saveComic(e) {
       e.preventDefault();
       const id = document.getElementById('comic-id').value;
-      const title = document.getElementById('comic-title').value;
-      const issue = document.getElementById('comic-issue').value;
+      const series = document.getElementById('comic-series').value.trim();
+      const volume = document.getElementById('comic-volume').value.trim();
+      const number = document.getElementById('comic-number').value.trim();
+      const title = document.getElementById('comic-title').value.trim();
       const publisher = document.getElementById('comic-publisher').value;
       const price = document.getElementById('comic-price').value;
       const format = document.getElementById('comic-format').value;
@@ -751,14 +856,16 @@
         // Editar
         const index = comics.findIndex(c => c.id === id);
         if (index !== -1) {
-          comics[index] = { id, title, issue, publisher, price, format, status, cutoffDate, releaseDate, notes };
+          comics[index] = { id, series, volume, number, title, publisher, price, format, status, cutoffDate, releaseDate, notes };
         }
       } else {
         // Nuevo
         const newComic = {
           id: Date.now().toString(),
+          series,
+          volume,
+          number,
           title,
-          issue,
           publisher,
           price,
           format,
@@ -779,8 +886,10 @@
       if (!comic) return;
 
       document.getElementById('comic-id').value = comic.id;
-      document.getElementById('comic-title').value = comic.title;
-      document.getElementById('comic-issue').value = comic.issue || '';
+      document.getElementById('comic-series').value = comic.series || '';
+      document.getElementById('comic-volume').value = comic.volume || '';
+      document.getElementById('comic-number').value = comic.number || '';
+      document.getElementById('comic-title').value = comic.title || '';
       document.getElementById('comic-publisher').value = comic.publisher || '';
       document.getElementById('comic-price').value = comic.price || '';
       document.getElementById('comic-format').value = comic.format || 'physical';
