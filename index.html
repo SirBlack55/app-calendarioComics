@@ -156,23 +156,41 @@
       </div>
     </section>
 
+    <!-- Seccion 4: Biblioteca (progreso por colección/volumen) -->
+    <section id="view-library" class="hidden space-y-4">
+      <div class="bg-indigo-500/10 border border-indigo-500/20 p-4 rounded-2xl flex items-start space-x-3">
+        <i data-lucide="library" class="w-5 h-5 text-indigo-400 shrink-0 mt-0.5"></i>
+        <p class="text-xs text-indigo-200/90 leading-relaxed">
+          Agrupa tus cómics por colección y volumen. Toca "Editar total" para poner el número total de la serie (si aún no lo sabes, déjalo vacío).
+        </p>
+      </div>
+
+      <div id="library-list" class="space-y-3">
+        <!-- Grupos de colección dinámicos -->
+      </div>
+    </section>
+
   </main>
 
   <!-- Navegación Inferior Nativa (TabBar) -->
   <nav class="fixed bottom-0 left-0 right-0 bg-slate-900/90 backdrop-blur-lg border-t border-slate-800 pb-safe z-30">
-    <div class="flex justify-around items-center py-2 px-2">
-      <button onclick="switchTab('calendar')" id="tab-calendar" class="flex flex-col items-center py-1 px-3 text-indigo-400 transition">
+    <div class="flex justify-around items-center py-2 px-1">
+      <button onclick="switchTab('calendar')" id="tab-calendar" class="flex flex-col items-center py-1 px-2 text-indigo-400 transition">
         <i data-lucide="calendar" class="w-6 h-6"></i>
         <span class="text-[10px] font-medium mt-1">Calendario</span>
       </button>
-      <button onclick="switchTab('missing')" id="tab-missing" class="flex flex-col items-center py-1 px-3 text-slate-500 hover:text-slate-300 transition relative">
+      <button onclick="switchTab('missing')" id="tab-missing" class="flex flex-col items-center py-1 px-2 text-slate-500 hover:text-slate-300 transition relative">
         <i data-lucide="clock" class="w-6 h-6"></i>
         <span class="text-[10px] font-medium mt-1">Pendientes</span>
-        <span id="missing-badge" class="hidden absolute top-0 right-3 bg-red-500 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold">0</span>
+        <span id="missing-badge" class="hidden absolute top-0 right-1 bg-red-500 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold">0</span>
       </button>
-      <button onclick="switchTab('all')" id="tab-all" class="flex flex-col items-center py-1 px-3 text-slate-500 hover:text-slate-300 transition">
+      <button onclick="switchTab('all')" id="tab-all" class="flex flex-col items-center py-1 px-2 text-slate-500 hover:text-slate-300 transition">
         <i data-lucide="list" class="w-6 h-6"></i>
         <span class="text-[10px] font-medium mt-1">Colección</span>
+      </button>
+      <button onclick="switchTab('library')" id="tab-library" class="flex flex-col items-center py-1 px-2 text-slate-500 hover:text-slate-300 transition">
+        <i data-lucide="library" class="w-6 h-6"></i>
+        <span class="text-[10px] font-medium mt-1">Biblioteca</span>
       </button>
     </div>
   </nav>
@@ -282,6 +300,24 @@
       <div class="flex gap-2 pt-2">
         <button onclick="closeDeleteModal()" class="w-1/2 bg-slate-800 text-slate-300 py-2.5 rounded-xl text-xs font-semibold hover:bg-slate-700 transition">Cancelar</button>
         <button id="confirm-delete-btn" class="w-1/2 bg-red-600 text-white py-2.5 rounded-xl text-xs font-semibold hover:bg-red-500 shadow-lg shadow-red-600/30 transition">Eliminar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal para editar el total de números de una colección/volumen (Biblioteca) -->
+  <div id="total-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 p-6 rounded-3xl max-w-xs w-full space-y-4 shadow-2xl">
+      <div>
+        <h4 class="font-bold text-white text-base" id="total-modal-title">Editar total</h4>
+        <p class="text-xs text-slate-400 mt-1">Déjalo vacío si aún no sabes cuántos números tendrá esta colección.</p>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-slate-400 mb-1">Total de números</label>
+        <input type="number" min="1" id="total-modal-input" placeholder="Ej. 102" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+      </div>
+      <div class="flex gap-2 pt-1">
+        <button type="button" onclick="closeTotalModal()" class="w-1/2 bg-slate-800 text-slate-300 py-2.5 rounded-xl text-xs font-semibold hover:bg-slate-700 transition">Cancelar</button>
+        <button type="button" onclick="saveTotalModal()" class="w-1/2 bg-indigo-600 text-white py-2.5 rounded-xl text-xs font-semibold hover:bg-indigo-500 shadow-lg shadow-indigo-600/30 transition">Guardar</button>
       </div>
     </div>
   </div>
@@ -451,26 +487,186 @@
       }
     });
 
+    // --- Biblioteca: agrupar cómics por Colección + Volumen ---
+
+    // Clave única para agrupar. No es sensible a mayúsculas ni acentos por simplicidad,
+    // pero conserva el texto original para mostrarlo.
+    function groupKey(series, volume) {
+      return `${series}::${volume || ''}`;
+    }
+
+    // El total (número final de la colección, si se conoce) se guarda aparte,
+    // ya que es un dato "del grupo" y no de un cómic individual.
+    function loadSeriesTotals() {
+      try {
+        return JSON.parse(localStorage.getItem('pwa_series_totals') || '{}');
+      } catch (e) {
+        return {};
+      }
+    }
+
+    function saveSeriesTotals(totals) {
+      localStorage.setItem('pwa_series_totals', JSON.stringify(totals));
+    }
+
+    function renderLibrary() {
+      const container = document.getElementById('library-list');
+      if (!container) return;
+
+      // Agrupar cómics existentes por Colección + Volumen
+      const map = {};
+      comics.forEach(c => {
+        if (!c.series) return;
+        const key = groupKey(c.series, c.volume);
+        if (!map[key]) map[key] = { key, series: c.series, volume: c.volume, items: [] };
+        map[key].items.push(c);
+      });
+
+      const groups = Object.values(map).sort((a, b) => {
+        const bySeries = a.series.localeCompare(b.series, 'es', { sensitivity: 'base' });
+        if (bySeries !== 0) return bySeries;
+        return (a.volume || '').localeCompare(b.volume || '', 'es', { sensitivity: 'base', numeric: true });
+      });
+
+      if (groups.length === 0) {
+        container.innerHTML = `
+          <div class="text-center py-12 text-slate-500 text-sm">
+            Aún no tienes cómics registrados para agrupar en tu biblioteca.
+          </div>
+        `;
+        return;
+      }
+
+      const totals = loadSeriesTotals();
+
+      container.innerHTML = groups.map((g, idx) => {
+        const total = totals[g.key] || null;
+        const acquiredCount = g.items.filter(i => i.status === 'acquired').length;
+        const percent = total ? Math.min(100, Math.round((acquiredCount / total) * 100)) : 0;
+
+        // Ordenar los números de la colección (numéricamente si es posible: soporta Annuals, #32.1, etc.)
+        const sortedItems = [...g.items].sort((a, b) => {
+          const na = parseFloat(a.number);
+          const nb = parseFloat(b.number);
+          if (!isNaN(na) && !isNaN(nb) && na !== nb) return na - nb;
+          return (a.number || '').localeCompare(b.number || '', 'es', { numeric: true });
+        });
+
+        const statusChipClasses = {
+          acquired: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+          reserved: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
+          pending: 'bg-slate-800 text-slate-400 border-slate-700'
+        };
+
+        return `
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+            <div class="flex justify-between items-start gap-3 cursor-pointer" data-group-toggle="${idx}">
+              <div class="min-w-0">
+                <h4 class="font-bold text-white text-sm truncate">
+                  ${escapeHtml(g.series)}${g.volume ? ` <span class="text-slate-400 font-normal">Vol. ${escapeHtml(g.volume)}</span>` : ''}
+                </h4>
+                <p class="text-[11px] text-slate-500 mt-0.5">${g.items.length} ${g.items.length === 1 ? 'número añadido' : 'números añadidos'}</p>
+              </div>
+              <div class="text-right shrink-0">
+                <div class="text-lg font-bold text-indigo-400 leading-none">${acquiredCount}<span class="text-slate-600">/${total ?? '??'}</span></div>
+                <button type="button" data-group-edit-total="${idx}" class="text-[10px] text-slate-500 hover:text-indigo-400 underline mt-1">Editar total</button>
+              </div>
+            </div>
+
+            ${total ? `
+              <div class="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                <div class="h-full bg-gradient-to-r from-indigo-500 to-purple-500" style="width:${percent}%"></div>
+              </div>
+            ` : ''}
+
+            <div class="hidden pt-2 border-t border-slate-800/80 flex flex-wrap gap-1.5" data-group-detail="${idx}">
+              ${sortedItems.map(i => `
+                <span class="text-[10px] px-2 py-1 rounded-lg font-semibold border ${statusChipClasses[i.status] || statusChipClasses.pending}">
+                  ${i.number ? '#' + escapeHtml(i.number) : (i.title ? escapeHtml(i.title) : '—')}
+                </span>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      // Expandir / colapsar detalle del grupo al tocar la cabecera
+      container.querySelectorAll('[data-group-toggle]').forEach(el => {
+        el.addEventListener('click', () => {
+          const idx = el.getAttribute('data-group-toggle');
+          const detail = container.querySelector(`[data-group-detail="${idx}"]`);
+          if (detail) detail.classList.toggle('hidden');
+        });
+      });
+
+      // Abrir el modal de edición de total (sin propagar al toggle de arriba)
+      container.querySelectorAll('[data-group-edit-total]').forEach(el => {
+        el.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const idx = parseInt(el.getAttribute('data-group-edit-total'), 10);
+          openTotalModal(groups[idx]);
+        });
+      });
+    }
+
+    // Modal de edición del total de una colección/volumen
+    let currentTotalGroupKey = null;
+
+    function openTotalModal(group) {
+      currentTotalGroupKey = group.key;
+      const totals = loadSeriesTotals();
+      document.getElementById('total-modal-title').innerText =
+        `${group.series}${group.volume ? ' Vol. ' + group.volume : ''}`;
+      document.getElementById('total-modal-input').value = totals[group.key] || '';
+      document.getElementById('total-modal').classList.remove('hidden');
+    }
+
+    function closeTotalModal() {
+      currentTotalGroupKey = null;
+      document.getElementById('total-modal').classList.add('hidden');
+    }
+
+    function saveTotalModal() {
+      if (!currentTotalGroupKey) return;
+      const totals = loadSeriesTotals();
+      const val = document.getElementById('total-modal-input').value.trim();
+
+      if (val) {
+        totals[currentTotalGroupKey] = parseInt(val, 10);
+      } else {
+        delete totals[currentTotalGroupKey];
+      }
+
+      saveSeriesTotals(totals);
+      closeTotalModal();
+      renderLibrary();
+    }
+
     // Navegación de pestañas (Tabs)
     function switchTab(tab) {
       activeTab = tab;
       document.getElementById('view-calendar').classList.add('hidden');
       document.getElementById('view-missing').classList.add('hidden');
       document.getElementById('view-all').classList.add('hidden');
+      document.getElementById('view-library').classList.add('hidden');
 
-      document.getElementById('tab-calendar').className = "flex flex-col items-center py-1 px-3 text-slate-500 hover:text-slate-300 transition";
-      document.getElementById('tab-missing').className = "flex flex-col items-center py-1 px-3 text-slate-500 hover:text-slate-300 transition relative";
-      document.getElementById('tab-all').className = "flex flex-col items-center py-1 px-3 text-slate-500 hover:text-slate-300 transition";
+      document.getElementById('tab-calendar').className = "flex flex-col items-center py-1 px-2 text-slate-500 hover:text-slate-300 transition";
+      document.getElementById('tab-missing').className = "flex flex-col items-center py-1 px-2 text-slate-500 hover:text-slate-300 transition relative";
+      document.getElementById('tab-all').className = "flex flex-col items-center py-1 px-2 text-slate-500 hover:text-slate-300 transition";
+      document.getElementById('tab-library').className = "flex flex-col items-center py-1 px-2 text-slate-500 hover:text-slate-300 transition";
 
       if (tab === 'calendar') {
         document.getElementById('view-calendar').classList.remove('hidden');
-        document.getElementById('tab-calendar').className = "flex flex-col items-center py-1 px-3 text-indigo-400 transition";
+        document.getElementById('tab-calendar').className = "flex flex-col items-center py-1 px-2 text-indigo-400 transition";
       } else if (tab === 'missing') {
         document.getElementById('view-missing').classList.remove('hidden');
-        document.getElementById('tab-missing').className = "flex flex-col items-center py-1 px-3 text-amber-400 transition relative";
+        document.getElementById('tab-missing').className = "flex flex-col items-center py-1 px-2 text-amber-400 transition relative";
       } else if (tab === 'all') {
         document.getElementById('view-all').classList.remove('hidden');
-        document.getElementById('tab-all').className = "flex flex-col items-center py-1 px-3 text-indigo-400 transition";
+        document.getElementById('tab-all').className = "flex flex-col items-center py-1 px-2 text-indigo-400 transition";
+      } else if (tab === 'library') {
+        document.getElementById('view-library').classList.remove('hidden');
+        document.getElementById('tab-library').className = "flex flex-col items-center py-1 px-2 text-indigo-400 transition";
       }
       renderApp();
     }
@@ -485,6 +681,8 @@
         renderMissingComics();
       } else if (activeTab === 'all') {
         renderAllComics();
+      } else if (activeTab === 'library') {
+        renderLibrary();
       }
       lucide.createIcons();
     }
